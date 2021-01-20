@@ -38,7 +38,7 @@ void *createPublishers(void *ptr);
 
 void *createBooks(void *ptr);
 
-void insertBook(int publisherTypeIndex, book newBook);
+void insertBook(int publisherIndex, int publisherTypeIndex, book newBook);
 
 bookPtr increaseSizeofBuffer(int publisherTypeIndex);
 
@@ -74,20 +74,13 @@ int main(int argc, char *argv[]) {
         sem_init(&(newPublisherType->emptyCount), 0, initBufferSize);
         sem_init(&(newPublisherType->fullCount), 0, 0);
         publisherTypes[i] = *newPublisherType;
-        pthread_create(&(newPublisherType->publisherTypeId), NULL, createPublishers, (void *) (i + 1));
+        pthread_create(&(newPublisherType->publisherTypeId), NULL, test, (void *) (i + 1));
     }
 
     for (i = 0; i < publisherTypeSize; i++) {
         pthread_join(publisherTypes[i].publisherTypeId, &status);
     }
 
-
-    for(i = 0; i < packagerSize; i++) { // Creating packagers
-        packagerPtr newPackager = calloc(1, sizeof(packager));
-        newPackager->books = calloc(booksPerPackage, sizeof(book));
-        newPackager->bookCount = 0;
-        packagers[i] = *newPackager;
-    }
 
     int j;
     for (i = 0; i < publisherTypeSize; i++) {
@@ -104,6 +97,16 @@ int main(int argc, char *argv[]) {
             pthread_create(&(newPublisher->publisherId), NULL, createBooks, (void *) newBookInfoPtr);
         }
     }
+
+
+    int k;
+    for(k = 0; k < packagerSize; k++) { // Creating packagers
+        packagerPtr newPackager = calloc(1, sizeof(packager));
+        newPackager->books = calloc(booksPerPackage, sizeof(book));
+        newPackager->bookCount = 0;
+        packagers[k] = *newPackager;
+    }
+
 
     /*for (i = 0; i < publisherTypeSize; i++) {
         for (j = 0; j < publisherSize; j++) {
@@ -128,6 +131,26 @@ int main(int argc, char *argv[]) {
     }
 }*/
 
+void packBook(int packagerIndex, int publisherTypeIndex) {
+    book selectedBook;
+    selectedBook = publisherTypes[publisherTypeIndex].books[0]; //not sure
+    //free(publisherTypes[publisherTypeIndex].books[0]); // somehow needs to be removed
+
+    int i;
+    for (i = 0; i < booksPerPackage; i++) {
+        if(packagers[packagerIndex].books[i].name == NULL) { // if package is not full yet
+            packagers[packagerIndex].books[i] = selectedBook;
+            packagers[packagerIndex].bookCount++;
+            printf("book %s inserted to package of packager %d\n", selectedBook.name, packagerIndex);
+            break;
+        }
+        else // if package is Full
+            printf("packager %d package is full\n", packagerIndex);
+
+    }
+
+}
+
 void *createBooks(void *ptr) {
     bookInfoPtr newBookInfoPtr = ((bookInfoPtr) ptr);
     int i;
@@ -143,26 +166,6 @@ void *createBooks(void *ptr) {
         strcpy(newBook->name, bookname);
 
         insertBook(newBookInfoPtr->publisherId, newBookInfoPtr->publisherTypeId, *newBook);
-    }
-
-}
-
-void packBook(int packagerIndex, int publisherTypeIndex) {
-    book selectedBook;
-    selectedBook = publisherTypes[publisherTypeIndex].books[0]; //not sure
-    free(publisherTypes[publisherTypeIndex].books[0]); // somehow needs to be removed
-
-    int i;
-    for (i = 0; i < booksPerPackage; i++) {
-        if(packagers[packagerIndex].books[i].name == NULL) { // if package is not full yet
-            packagers[packagerIndex].books[i] = selectedBook;
-            packagers[packagerIndex].bookCount++;
-            printf("book %s inserted to package of packager %d\n", selectedBook.name, packagerIndex);
-            break;
-        }
-        else // if package is Full
-            printf("packager %d package is full\n", packagerIndex);
-
     }
 
 }
@@ -205,4 +208,3 @@ bookPtr increaseSizeofBuffer(int publisherTypeIndex) {
     currBufferSize = currBufferSize * 2;
     return newBuffer;
 }
-
