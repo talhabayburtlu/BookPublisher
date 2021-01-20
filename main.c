@@ -203,8 +203,8 @@ void packBook(int packagerIndex, int publisherTypeIndex) {
     for (j = publisherTypes[publisherTypeIndex].booksBufferSize; j >= 0; j--) { // Remove from publisher buffer
         if (publisherTypes[publisherTypeIndex].books[j].name != NULL) { // find last book
             selectedBook = publisherTypes[publisherTypeIndex].books[j];
-            publisherTypes[publisherTypeIndex].books->name = NULL; // remove book
-            printf("book %s removed from publisherType %d\n", selectedBook.name, publisherTypeIndex);
+            publisherTypes[publisherTypeIndex].books[j].name = NULL; // remove book
+            //printf("%s removed from publisherType %d\n", selectedBook.name, publisherTypeIndex);
             break;
         }
     }
@@ -218,13 +218,13 @@ void packBook(int packagerIndex, int publisherTypeIndex) {
             packagers[packagerIndex].bookCount == booksPerPackage - 1) { // if package is not full yet
             packagers[packagerIndex].books[i].name = selectedBook.name;
             packagers[packagerIndex].bookCount++;
-            printf("book %s inserted to package of packager %d\n", selectedBook.name, packagerIndex);
+            printf("Packager %d  \t%s Into the package.\n", packagerIndex+1, selectedBook.name);
 
-            printf("Finished preparing one package of packager %d. Package contains:\n", packagerIndex);
+            printf("Finished preparing one package of packager %d. Package contains:\n", packagerIndex+1);
             int k;
             for(k = 0; k < booksPerPackage; k++) { // empty the package
-                printf("%s, ", packagers[packagerIndex].books[i].name); // book name
-                packagers[packagerIndex].books[i].name = NULL; // remove
+                printf("%s, ", packagers[packagerIndex].books[k].name); // book name
+                packagers[packagerIndex].books[k].name = NULL; // remove
             }
             packagers[packagerIndex].bookCount = 0;
             printf("\n");
@@ -234,7 +234,7 @@ void packBook(int packagerIndex, int publisherTypeIndex) {
         if(packagers[packagerIndex].books[i].name == NULL) { // if package is not full yet
             packagers[packagerIndex].books[i].name = selectedBook.name;
             packagers[packagerIndex].bookCount++;
-            printf("book %s inserted to package of packager %d\n", selectedBook.name, packagerIndex);
+            printf("Packager %d  \t%s Into the package.\n", packagerIndex+1, selectedBook.name);
             break;
         }
 
