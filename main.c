@@ -130,11 +130,11 @@ void insertBook(int publisherTypeIndex, book newBook) {
         int val = -1;
         sem_getvalue(&(publisherTypes[publisherTypeIndex].emptyCount), &val);
 
-        printf("Val %d\n", val);
         if (val == 0) {
-            printf("increase talimati \n");
             bookPtr newBuffer = increaseSizeofBuffer(publisherTypeIndex);
             publisherTypes[publisherTypeIndex].books = newBuffer;
+            sem_getvalue(&(publisherTypes[publisherTypeIndex].fullCount), &val);
+            sem_init(&(publisherTypes[publisherTypeIndex].emptyCount), 0, currBufferSize - val);
         }
 
         // TODO: There should be check about buffer(books array) size. It can be handled with availablePosition is equal to the current size;
@@ -150,7 +150,6 @@ void insertBook(int publisherTypeIndex, book newBook) {
 }
 
 bookPtr increaseSizeofBuffer(int publisherTypeIndex) {
-    printf("increase talimati çalıştırıldı \n");
     bookPtr newBuffer = calloc(currBufferSize * 2, sizeof(book));
 
     int i;
@@ -158,7 +157,5 @@ bookPtr increaseSizeofBuffer(int publisherTypeIndex) {
         newBuffer[i] = publisherTypes[publisherTypeIndex].books[i];
 
     currBufferSize = currBufferSize * 2;
-
-    printf("Yeni buffer dönüyor \n");
     return newBuffer;
 }
