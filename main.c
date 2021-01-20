@@ -232,9 +232,10 @@ void packBook(int packagerIndex, int publisherTypeIndex) {
         }
 
         if(packagers[packagerIndex].books[i].name == NULL) { // if package is not full yet
-            packagers[packagerIndex].books[i].name = selectedBook.name;
+            packagers[packagerIndex].books[i].name = calloc(25, sizeof(char));
+            strcpy(packagers[packagerIndex].books[i].name, selectedBook.name);
             packagers[packagerIndex].bookCount++;
-            printf("Packager %d  \t%s Into the package.\n", packagerIndex+1, selectedBook.name);
+            printf("Packager %d  \t%s Into the package.\n", packagerIndex + 1, selectedBook.name);
             break;
         }
 
