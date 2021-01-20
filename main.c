@@ -24,6 +24,8 @@ typedef struct {
 
 typedef struct {
     pthread_t packagerId;
+    book *books;
+    int bookCount;
 } packager, *packagerPtr;
 
 
@@ -34,6 +36,8 @@ void *createBooks(void *ptr);
 void insertBook(int publisherTypeIndex, book newBook);
 
 bookPtr increaseSizeofBuffer(int publisherTypeIndex);
+
+void packBook(int packagerIndex, int publisherTypeIndex);
 
 int publisherTypeSize, publisherSize, packagerSize, bookPerPublisher, booksPerPackage, initBufferSize, currBufferSize;
 
@@ -66,6 +70,13 @@ int main(int argc, char *argv[]) {
 
     for (i = 0; i < publisherTypeSize; i++) {
         pthread_join(publisherTypes[i].publisherTypeId, &status);
+    }
+
+    for(i = 0; i < packagerSize; i++) { // Creating packagers
+        packagerPtr newPackager = calloc(1, sizeof(packager));
+        newPackager->books = calloc(booksPerPackage, sizeof(book));
+        newPackager->bookCount = 0;
+        packagers[i] = *newPackager;
     }
 
     /*int j;
@@ -122,6 +133,26 @@ void *createBooks(void *ptr) {
 
 }
 
+void packBook(int packagerIndex, int publisherTypeIndex) {
+    book selectedBook;
+    selectedBook = publisherTypes[publisherTypeIndex].books[0]; //not sure
+    free(publisherTypes[publisherTypeIndex].books[0]); // somehow needs to be removed
+
+    int i;
+    for (i = 0; i < booksPerPackage; i++) {
+        if(packagers[packagerIndex].books[i].name == NULL) { // if package is not full yet
+            packagers[packagerIndex].books[i] = selectedBook;
+            packagers[packagerIndex].bookCount++;
+            printf("book %s inserted to package of packager %d\n", selectedBook.name, packagerIndex);
+            break;
+        }
+        else // if package is Full
+            printf("packager %d package is full\n", packagerIndex);
+
+    }
+
+}
+
 void insertBook(int publisherTypeIndex, book newBook) {
     int i;
     sem_wait(&(publisherTypes[publisherTypeIndex].emptyCount));
@@ -159,3 +190,4 @@ bookPtr increaseSizeofBuffer(int publisherTypeIndex) {
     currBufferSize = currBufferSize * 2;
     return newBuffer;
 }
+
