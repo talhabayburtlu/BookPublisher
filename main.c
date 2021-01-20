@@ -10,9 +10,11 @@ typedef struct {
 
 typedef struct {
     pthread_t publisherTypeId;
+    pthread_mutex_t booksBufferMutex;
     book *books;
     int bookNameCounter;
-    int availablePosition;
+    sem_t fullCount;
+    sem_t emptyCount;
 } publisherType, *publisherTypePtr;
 
 typedef struct {
@@ -29,6 +31,10 @@ void *createPublishers(void *ptr);
 
 void *createBooks(void *ptr);
 
+void insertBook(int publisherTypeIndex, book newBook);
+
+bookPtr increaseSizeofBuffer(int publisherTypeIndex);
+
 int publisherTypeSize, publisherSize, packagerSize, bookPerPublisher, booksPerPackage, initBufferSize, currBufferSize;
 
 publisherTypePtr publisherTypes;
@@ -43,7 +49,7 @@ int main(int argc, char *argv[]) {
     currBufferSize = initBufferSize;
 
     publisherTypes = calloc(publisherTypeSize, sizeof(publisherType));
-    publishers = calloc(publisherSize, sizeof(publisher));
+    publishers = calloc(publisherSize * publisherTypeSize, sizeof(publisher));
     packagers = calloc(packagerSize, sizeof(packager));
 
     int i;
@@ -52,6 +58,8 @@ int main(int argc, char *argv[]) {
         publisherTypePtr newPublisherType = calloc(1, sizeof(publisherType));
         newPublisherType->books = calloc(initBufferSize, sizeof(book));
         newPublisherType->bookNameCounter = 0;
+        sem_init(&(newPublisherType->emptyCount), 0, initBufferSize);
+        sem_init(&(newPublisherType->fullCount), 0, 0);
         publisherTypes[i] = *newPublisherType;
         pthread_create(&(newPublisherType->publisherTypeId), NULL, createPublishers, (void *) (i + 1));
     }
@@ -60,11 +68,27 @@ int main(int argc, char *argv[]) {
         pthread_join(publisherTypes[i].publisherTypeId, &status);
     }
 
+    /*int j;
+    for (i = 0; i < publisherTypeSize; i++) {
+        for (j = 0; j < publisherSize; j++) { // Creating publishers.
+            publisherPtr newPublisher = calloc(1, sizeof(publisher));
+            newPublisher->publisherType = &publisherTypes[i];
+            publishers[i* publisherSize + j] = *newPublisher;
+            pthread_create(&(newPublisher->publisherId), NULL, createBooks, (void *) i + 1);
+        }
+    }
+
+    for (i = 0; i < publisherTypeSize; i++) {
+        for (j = 0; j < publisherSize; j++) {
+            pthread_join(publishers[i* publisherSize + j].publisherId, &status);
+        }
+    }*/
+
     pthread_exit(NULL);
 }
 
 void *createPublishers(void *ptr) {
-    printf("%d publisher\n", (int) ptr);
+    // printf("%d publisher\n", (int) ptr);
     int publisherTypeId = (int) ptr;
     int i;
     void *status;
@@ -72,12 +96,13 @@ void *createPublishers(void *ptr) {
     for (i = 0; i < publisherSize; i++) { // Creating publishers.
         publisherPtr newPublisher = calloc(1, sizeof(publisher));
         newPublisher->publisherType = &publisherTypes[publisherTypeId - 1];
+        publishers[(publisherTypeId - 1) * publisherSize + i] = *newPublisher;
         pthread_create(&(newPublisher->publisherId), NULL, createBooks, (void *) publisherTypeId);
     }
 }
 
 void *createBooks(void *ptr) {
-    printf("kitap ediyoruz\n");
+    // printf("kitap ediyoruz\n");
     int publisherTypeId = (int) ptr;
     int i;
     void *status;
@@ -85,15 +110,55 @@ void *createBooks(void *ptr) {
     for (i = 0; i < bookPerPublisher; i++) { // Creating books.
         bookPtr newBook = calloc(1, sizeof(book));
         newBook->name = calloc(32, sizeof(char));
-        publisherTypes[publisherTypeId].bookNameCounter++;
-        int bookCount = publisherTypes[publisherTypeId].bookNameCounter;
-        printf("%d\n", bookCount);
-        // strcpy(newBook->name, sprintf("Book%d_%d", publisherTypeId, bookCount));
-        strcpy(newBook->name, "testbook");
-        publisherTypes[publisherTypeId].books[publisherTypes[publisherTypeId].availablePosition] = *newBook;
-        printf("check3\n");
-        publisherTypes[publisherTypeId].availablePosition++;
-        // TODO: There should be check about buffer(books array) size. It can be handled with availablePosition is equal to the current size;
+        publisherTypes[publisherTypeId - 1].bookNameCounter++;
+        int bookCount = publisherTypes[publisherTypeId - 1].bookNameCounter;
+        char *bookname = calloc(32, sizeof(char));
+        sprintf(bookname, "Book%d_%d", publisherTypeId, bookCount);
+        // printf("Created %s\n" , bookname);
+        strcpy(newBook->name, bookname);
+
+        insertBook(publisherTypeId - 1, *newBook);
     }
 
+}
+
+void insertBook(int publisherTypeIndex, book newBook) {
+    int i;
+    sem_wait(&(publisherTypes[publisherTypeIndex].emptyCount));
+    pthread_mutex_lock(&(publisherTypes[publisherTypeIndex].booksBufferMutex));
+    for (i = 0; i < currBufferSize; i++) {
+        int val = -1;
+        sem_getvalue(&(publisherTypes[publisherTypeIndex].emptyCount), &val);
+
+        printf("Val %d\n", val);
+        if (val == 0) {
+            printf("increase talimati \n");
+            bookPtr newBuffer = increaseSizeofBuffer(publisherTypeIndex);
+            publisherTypes[publisherTypeIndex].books = newBuffer;
+        }
+
+        // TODO: There should be check about buffer(books array) size. It can be handled with availablePosition is equal to the current size;
+        if (publisherTypes[publisherTypeIndex].books[i].name == NULL) {
+            publisherTypes[publisherTypeIndex].books[i] = newBook;
+            printf("inserted %s\n", newBook.name);
+            break;
+        }
+    }
+
+    sem_post(&(publisherTypes[publisherTypeIndex].fullCount));
+    pthread_mutex_unlock(&(publisherTypes[publisherTypeIndex].booksBufferMutex));
+}
+
+bookPtr increaseSizeofBuffer(int publisherTypeIndex) {
+    printf("increase talimati çalıştırıldı \n");
+    bookPtr newBuffer = calloc(currBufferSize * 2, sizeof(book));
+
+    int i;
+    for (i = 0; i < currBufferSize; i++)
+        newBuffer[i] = publisherTypes[publisherTypeIndex].books[i];
+
+    currBufferSize = currBufferSize * 2;
+
+    printf("Yeni buffer dönüyor \n");
+    return newBuffer;
 }
