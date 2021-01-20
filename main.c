@@ -59,6 +59,9 @@ packagerPtr packagers;
 
 void *test(void *ptr) {
     // printf("Created publisher type with id:%d\n" , (int) ptr);
+    // pthread_exit(NULL);
+
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -132,8 +135,10 @@ int main(int argc, char *argv[]) {
         pthread_join(packagers[i].packagerId, &status);
     }
 
+    // pthread_exit(NULL);
 
-    pthread_exit(NULL);
+    return NULL;
+
 }
 
 /*void *createPublishers(void *ptr) {
@@ -179,6 +184,9 @@ void *startPackaging(void *ptr) {
         available = availablePublisherTypeCount();
     }
 
+    // pthread_exit(NULL);
+
+    return NULL;
 }
 
 int availablePublisherTypeCount() {
@@ -264,6 +272,7 @@ void *createBooks(void *ptr) {
     printf("Publisher %d of type %d \tFinished publishing %d books. Exiting the system.\n",
            newBookInfoPtr->publisherId + 1, newBookInfoPtr->publisherTypeId + 1, bookPerPublisher);
 
+    pthread_exit(NULL);
 }
 
 void insertBook(int publisherIndex, int publisherTypeIndex, book newBook) {
