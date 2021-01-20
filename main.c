@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
         newPackager->books = calloc(booksPerPackage, sizeof(book));
         newPackager->bookCount = 0;
         packagers[k] = *newPackager;
-        pthread_create(&(newPackager->packagerId), NULL, startPackaging, (void *) newPackager->packagerId);
+        pthread_create(&(newPackager->packagerId), NULL, startPackaging, (void *) k);
     }
 
     for (i = 0; i < publisherTypeSize; i++) {
@@ -200,7 +200,7 @@ void packBook(int packagerIndex, int publisherTypeIndex) {
     sem_wait(&(publisherTypes[publisherTypeIndex].fullCount));
     pthread_mutex_lock(&(publisherTypes[publisherTypeIndex].booksBufferMutex));
 
-    for (j = publisherTypes[publisherTypeIndex].booksBufferSize; j >= 0; j--) { // Remove from publisher buffer
+    for (j = publisherTypes[publisherTypeIndex].booksBufferSize - 1; j >= 0; j--) { // Remove from publisher buffer
         if (publisherTypes[publisherTypeIndex].books[j].name != NULL) { // find last book
             selectedBook = publisherTypes[publisherTypeIndex].books[j];
             publisherTypes[publisherTypeIndex].books[j].name = NULL; // remove book
@@ -216,18 +216,19 @@ void packBook(int packagerIndex, int publisherTypeIndex) {
     for (i = 0; i < booksPerPackage; i++) {
         if (packagers[packagerIndex].books[i].name == NULL &&
             packagers[packagerIndex].bookCount == booksPerPackage - 1) { // if package is not full yet
-            packagers[packagerIndex].books[i].name = selectedBook.name;
+            packagers[packagerIndex].books[i].name = calloc(25, sizeof(char));
+            strcpy(packagers[packagerIndex].books[i].name, selectedBook.name);
             packagers[packagerIndex].bookCount++;
-            printf("Packager %d  \t%s Into the package.\n", packagerIndex+1, selectedBook.name);
+            printf("Packager %d  \t%s Into the package.\n", packagerIndex + 1, selectedBook.name);
 
-            printf("Finished preparing one package of packager %d. Package contains:\n", packagerIndex+1);
+            printf("Finished preparing one package of packager %d. Package contains:\n", packagerIndex + 1);
             int k;
-            for(k = 0; k < booksPerPackage; k++) { // empty the package
+            for (k = 0; k < booksPerPackage; k++) { // empty the package
                 printf("%s, ", packagers[packagerIndex].books[k].name); // book name
                 packagers[packagerIndex].books[k].name = NULL; // remove
             }
-            packagers[packagerIndex].bookCount = 0;
             printf("\n");
+            packagers[packagerIndex].bookCount = 0;
             break;
         }
 
