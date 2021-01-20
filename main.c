@@ -12,9 +12,12 @@ typedef struct {
     pthread_t publisherTypeId;
     pthread_mutex_t booksBufferMutex;
     book *books;
+    int booksBufferSize;
     int bookNameCounter;
     sem_t fullCount;
     sem_t emptyCount;
+    int isFinished;
+    pthread_mutex_t isFinishedMutex;
 } publisherType, *publisherTypePtr;
 
 typedef struct {
@@ -44,7 +47,11 @@ bookPtr increaseSizeofBuffer(int publisherTypeIndex);
 
 void packBook(int packagerIndex, int publisherTypeIndex);
 
-int publisherTypeSize, publisherSize, packagerSize, bookPerPublisher, booksPerPackage, initBufferSize, currBufferSize;
+void *startPackaging(void *ptr);
+
+int availablePublisherTypeCount();
+
+int publisherTypeSize, publisherSize, packagerSize, bookPerPublisher, booksPerPackage, initBufferSize;
 
 publisherTypePtr publisherTypes;
 publisherPtr publishers;
@@ -59,7 +66,6 @@ int main(int argc, char *argv[]) {
 
     publisherTypeSize = atoi(argv[2]), publisherSize = atoi(argv[3]), packagerSize = atoi(argv[4]),
     bookPerPublisher = atoi(argv[6]), booksPerPackage = atoi(argv[8]), initBufferSize = atoi(argv[9]),
-    currBufferSize = initBufferSize;
 
     publisherTypes = calloc(publisherTypeSize, sizeof(publisherType));
     publishers = calloc(publisherSize * publisherTypeSize, sizeof(publisher));
@@ -70,9 +76,12 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < publisherTypeSize; i++) { // Creating publisher types.
         publisherTypePtr newPublisherType = calloc(1, sizeof(publisherType));
         newPublisherType->books = calloc(initBufferSize, sizeof(book));
+        newPublisherType->booksBufferSize = initBufferSize;
         newPublisherType->bookNameCounter = 0;
+        newPublisherType->isFinished = 0;
         sem_init(&(newPublisherType->emptyCount), 0, initBufferSize);
         sem_init(&(newPublisherType->fullCount), 0, 0);
+
         publisherTypes[i] = *newPublisherType;
         pthread_create(&(newPublisherType->publisherTypeId), NULL, test, (void *) (i + 1));
     }
@@ -98,23 +107,31 @@ int main(int argc, char *argv[]) {
         }
     }
 
-
-    int k;
-    for(k = 0; k < packagerSize; k++) { // Creating packagers
-        packagerPtr newPackager = calloc(1, sizeof(packager));
-        newPackager->books = calloc(booksPerPackage, sizeof(book));
-        newPackager->bookCount = 0;
-        packagers[k] = *newPackager;
-    }
-
-    // WHILE LOOP İÇİNDE BUFFER BOŞ OLANA KADAR PACKBOOK RANDOM SAYILARLA ÇALIŞSIN
-
-
     /*for (i = 0; i < publisherTypeSize; i++) {
         for (j = 0; j < publisherSize; j++) {
             pthread_join(publishers[i* publisherSize + j].publisherId, &status);
         }
     }*/
+
+    int k;
+    for (k = 0; k < packagerSize; k++) { // Creating packagers
+        packagerPtr newPackager = calloc(1, sizeof(packager));
+        newPackager->books = calloc(booksPerPackage, sizeof(book));
+        newPackager->bookCount = 0;
+        packagers[k] = *newPackager;
+        pthread_create(&(newPackager->packagerId), NULL, startPackaging, (void *) newPackager->packagerId);
+    }
+
+    for (i = 0; i < publisherTypeSize; i++) {
+        for (j = 0; j < publisherSize; j++) {
+            pthread_join(publishers[i * publisherSize + j].publisherId, &status);
+        }
+    }
+
+    for (i = 0; i < publisherTypeSize; i++) {
+        pthread_join(packagers[i].packagerId, &status);
+    }
+
 
     pthread_exit(NULL);
 }
@@ -133,11 +150,58 @@ int main(int argc, char *argv[]) {
     }
 }*/
 
+void *startPackaging(void *ptr) {
+    int id = (int) ptr;
+    int available = availablePublisherTypeCount();
+
+    while (available) {
+        int randPublisherTypeIndex = rand() % publisherTypeSize;
+
+        while (publisherTypes[randPublisherTypeIndex].isFinished != 0) {
+            randPublisherTypeIndex = rand() % publisherTypeSize;
+        }
+
+        int val = -1;
+        sem_getvalue(&(publisherTypes[randPublisherTypeIndex].fullCount), &val);
+
+        packBook(id, randPublisherTypeIndex);
+
+        val = -1;
+        sem_getvalue(&(publisherTypes[randPublisherTypeIndex].fullCount), &val);
+
+        if (!val && publisherTypes[randPublisherTypeIndex].bookNameCounter == publisherSize * bookPerPublisher) {
+            pthread_mutex_lock(&(publisherTypes[randPublisherTypeIndex].isFinishedMutex));
+            publisherTypes[randPublisherTypeIndex].isFinished = 1;
+            pthread_mutex_unlock(&(publisherTypes[randPublisherTypeIndex].isFinishedMutex));
+        }
+
+
+        available = availablePublisherTypeCount();
+    }
+
+}
+
+int availablePublisherTypeCount() {
+    int i, count = 0;
+    for (i = 0; i < publisherTypeSize; i++) {
+        pthread_mutex_lock(&(publisherTypes[i].isFinishedMutex));
+        if (publisherTypes[i].isFinished == 0)
+            count++;
+        pthread_mutex_unlock(&(publisherTypes[i].isFinishedMutex));
+    }
+
+    return count;
+}
+
 void packBook(int packagerIndex, int publisherTypeIndex) {
     book selectedBook; // might use just names
     int j;
-    for (j = currBufferSize; j >= 0; j--){ // Remove from publisher buffer
-        if(publisherTypes[publisherTypeIndex].books[j].name != NULL) { // find last book
+
+    sem_wait(&(publisherTypes[publisherTypeIndex].fullCount));
+    pthread_mutex_lock(&(publisherTypes[publisherTypeIndex].booksBufferMutex));
+
+    for (j = publisherTypes[publisherTypeIndex].booksBufferSize; j >= 0; j--) { // Remove from publisher buffer
+        if (publisherTypes[publisherTypeIndex].books[j].name != NULL) { // find last book
             selectedBook = publisherTypes[publisherTypeIndex].books[j];
             publisherTypes[publisherTypeIndex].books->name = NULL; // remove book
             printf("book %s removed from publisherType %d\n", selectedBook.name, publisherTypeIndex);
@@ -145,9 +209,13 @@ void packBook(int packagerIndex, int publisherTypeIndex) {
         }
     }
 
+    pthread_mutex_unlock(&(publisherTypes[publisherTypeIndex].booksBufferMutex));
+    sem_post(&(publisherTypes[publisherTypeIndex].emptyCount));
+
     int i;
     for (i = 0; i < booksPerPackage; i++) {
-        if(packagers[packagerIndex].books[i].name == NULL && packagers[packagerIndex].bookCount == booksPerPackage -1) { // if package is not full yet
+        if (packagers[packagerIndex].books[i].name == NULL &&
+            packagers[packagerIndex].bookCount == booksPerPackage - 1) { // if package is not full yet
             packagers[packagerIndex].books[i].name = selectedBook.name;
             packagers[packagerIndex].bookCount++;
             printf("book %s inserted to package of packager %d\n", selectedBook.name, packagerIndex);
@@ -191,24 +259,32 @@ void *createBooks(void *ptr) {
         insertBook(newBookInfoPtr->publisherId, newBookInfoPtr->publisherTypeId, *newBook);
     }
 
+    printf("Publisher %d of type %d \tFinished publishing %d books. Exiting the system.\n",
+           newBookInfoPtr->publisherId + 1, newBookInfoPtr->publisherTypeId + 1, bookPerPublisher);
+
 }
 
 void insertBook(int publisherIndex, int publisherTypeIndex, book newBook) {
     int i;
-    sem_wait(&(publisherTypes[publisherTypeIndex].emptyCount));
+
     pthread_mutex_lock(&(publisherTypes[publisherTypeIndex].booksBufferMutex));
-    for (i = 0; i < currBufferSize; i++) {
-        int val = -1;
-        sem_getvalue(&(publisherTypes[publisherTypeIndex].emptyCount), &val);
 
-        if (val == 0) {
-            bookPtr newBuffer = increaseSizeofBuffer(publisherTypeIndex);
-            publisherTypes[publisherTypeIndex].books = newBuffer;
-            sem_getvalue(&(publisherTypes[publisherTypeIndex].fullCount), &val);
-            sem_init(&(publisherTypes[publisherTypeIndex].emptyCount), 0, currBufferSize - val);
-        }
+    int val = -1;
+    sem_getvalue(&(publisherTypes[publisherTypeIndex].emptyCount), &val);
 
-        // TODO: There should be check about buffer(books array) size. It can be handled with availablePosition is equal to the current size;
+    if (val == 0) {
+        printf("Publisher %d of type %d \tBuffer is full. Resizing the buffer.\n", publisherIndex + 1,
+               publisherTypeIndex + 1);
+        bookPtr newBuffer = increaseSizeofBuffer(publisherTypeIndex);
+        publisherTypes[publisherTypeIndex].books = newBuffer;
+        sem_getvalue(&(publisherTypes[publisherTypeIndex].fullCount), &val);
+        sem_init(&(publisherTypes[publisherTypeIndex].emptyCount), 0,
+                 publisherTypes[publisherTypeIndex].booksBufferSize - val);
+    }
+
+    sem_wait(&(publisherTypes[publisherTypeIndex].emptyCount));
+    for (i = 0; i < publisherTypes[publisherTypeIndex].booksBufferSize; i++) {
+
         if (publisherTypes[publisherTypeIndex].books[i].name == NULL) {
             publisherTypes[publisherTypeIndex].books[i] = newBook;
             printf("Publisher %d of type %d \t%s is published and put into the buffer %d\n", publisherIndex + 1,
@@ -222,12 +298,13 @@ void insertBook(int publisherIndex, int publisherTypeIndex, book newBook) {
 }
 
 bookPtr increaseSizeofBuffer(int publisherTypeIndex) {
-    bookPtr newBuffer = calloc(currBufferSize * 2, sizeof(book));
+    bookPtr newBuffer = calloc(publisherTypes[publisherTypeIndex].booksBufferSize * 2, sizeof(book));
 
     int i;
-    for (i = 0; i < currBufferSize; i++)
+    for (i = 0; i < publisherTypes[publisherTypeIndex].booksBufferSize; i++)
         newBuffer[i] = publisherTypes[publisherTypeIndex].books[i];
 
-    currBufferSize = currBufferSize * 2;
+    publisherTypes[publisherTypeIndex].booksBufferSize = publisherTypes[publisherTypeIndex].booksBufferSize * 2;
+
     return newBuffer;
 }
