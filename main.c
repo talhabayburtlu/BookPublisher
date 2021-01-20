@@ -59,9 +59,8 @@ packagerPtr packagers;
 
 void *test(void *ptr) {
     // printf("Created publisher type with id:%d\n" , (int) ptr);
-    // pthread_exit(NULL);
 
-    return NULL;
+    pthread_exit(NULL);
 }
 
 int main(int argc, char *argv[]) {
@@ -135,25 +134,10 @@ int main(int argc, char *argv[]) {
         pthread_join(packagers[i].packagerId, &status);
     }
 
-    // pthread_exit(NULL);
+    pthread_exit(NULL);
 
-    return NULL;
-
+    //return NULL;
 }
-
-/*void *createPublishers(void *ptr) {
-    // printf("%d publisher\n", (int) ptr);
-    int publisherTypeId = (int) ptr;
-    int i;
-    void *status;
-
-    for (i = 0; i < publisherSize; i++) { // Creating publishers.
-        publisherPtr newPublisher = calloc(1, sizeof(publisher));
-        newPublisher->publisherType = &publisherTypes[publisherTypeId - 1];
-        publishers[(publisherTypeId - 1) * publisherSize + i] = *newPublisher;
-        pthread_create(&(newPublisher->publisherId), NULL, createBooks, (void *) publisherTypeId);
-    }
-}*/
 
 void *startPackaging(void *ptr) {
     int id = (int) ptr;
@@ -180,21 +164,36 @@ void *startPackaging(void *ptr) {
             pthread_mutex_unlock(&(publisherTypes[randPublisherTypeIndex].isFinishedMutex));
         }
 
-
         available = availablePublisherTypeCount();
     }
 
-    // pthread_exit(NULL);
+    if (available == 0) { // finished
+        int x;
+        int j;
+        for (j = 0; j < packagerSize; j++) {
+            printf("There are no publishers left in the system. Only %d of %d "
+                   "number of books could be packaged.\n", packagers[id].bookCount, booksPerPackage);
+            printf("The package contains: \n");
+            for (x = 0; x < booksPerPackage; x++) {
+                if (packagers[j].books[x].name != NULL) {
+                    printf("%s, ", packagers[id].books[x].name); // book name
+                    packagers[j].books[x].name = NULL; // remove
+                }
+            }
+        }
+    }
 
-    return NULL;
+    pthread_exit(NULL);
 }
 
 int availablePublisherTypeCount() {
     int i, count = 0;
+
     for (i = 0; i < publisherTypeSize; i++) {
         pthread_mutex_lock(&(publisherTypes[i].isFinishedMutex));
-        if (publisherTypes[i].isFinished == 0)
+        if (publisherTypes[i].isFinished == 0) {
             count++;
+        }
         pthread_mutex_unlock(&(publisherTypes[i].isFinishedMutex));
     }
 
@@ -204,6 +203,10 @@ int availablePublisherTypeCount() {
 void packBook(int packagerIndex, int publisherTypeIndex) {
     book selectedBook; // might use just names
     int j;
+
+    int val = -1;
+    sem_getvalue(&(publisherTypes[publisherTypeIndex].fullCount), &val);
+    // printf("fullcount: %d\n" ,val);
 
     sem_wait(&(publisherTypes[publisherTypeIndex].fullCount));
     pthread_mutex_lock(&(publisherTypes[publisherTypeIndex].booksBufferMutex));
